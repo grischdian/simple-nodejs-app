@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simple-app
+spec:
+  selector:
+    matchLabels:
+      app: simple-app
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: simple-app
+    spec:
+      containers:
+      - name: simple-app-server
+        envFrom:
+        - configMapRef:
+            name: myconfigmap
+        volumeMounts:
+        - mountPath: /usr/src/app/123
+          name: myvolume
+        image: simple-app:v0.1
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 3000
+      volumes:
+      - name: myvolume
+        persistentVolumeClaim:
+          claimName: task-pv-claim
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: simple-app-service
+spec:
+  type: ClusterIP
+
+  selector:
+    app: simple-app
+  ports:
+  - port: 2000
+    targetPort: 3000
+
+
+---
+
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: simple-app-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  - host: simple-app.b1-systems.de
+    http:
+      paths: 
+      - path: /test/123
+        backend:
+          serviceName: simple-app-service
+          servicePort: 2000
+  tls:
+  - hosts:
+    - simple-app.b1-systems.de
+    secretName: myCertSecret
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: local-pv
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+  - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  hostPath:
+    path: "/mnt"
+
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: task-pv-claim
+spec:
+  storageClassName: local-storage
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 3Gi
+
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: myconfigmap
+data:
+  DBSERVER: 10.0.0.1
+  DBPORT: '3306'
+  DBUSER: root
+  DBPASS: SagIchNicht123
